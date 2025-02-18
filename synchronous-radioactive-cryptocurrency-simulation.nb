@@ -1,0 +1,91 @@
+(*
+  Radioactive Currency Simulation
+  This simulation models the concept of a "radioactive" currency - where coins decay
+  (or "expire") over time in a manner analogous to the half-life of radioactive elements.
+  
+  In this model:
+    - Each coin represents a unit of currency with an assigned lifetime.
+    - Lifetimes are generated using a random distribution (with adjustments) to simulate
+      the desired decay behavior, similar to how a fixed percentage of radioactive atoms
+      decay over time.
+    - The total lifetimes are adjusted such that a specified proportion of coins "decay"
+      (i.e., are removed from circulation) after a given period, mimicking a natural
+      demurrage mechanism.
+    - Coins are sorted by their lifetimes, and they are removed consecutively:
+        * The coin with the shortest lifetime is removed exactly when its lifetime elapses.
+        * Subsequent coins are removed after waiting for the additional time difference
+          between their lifetimes and the previous coin's lifetime.
+  
+  This approach illustrates a monetary system in which old currency units are periodically
+  removed from circulation (simulating decay), potentially replaced by new units to maintain
+  a stable overall supply. It is a conceptual model for implementing demurrage or a decay-based
+  monetary policy to discourage hoarding and promote continuous circulation.
+*)
+
+(* 1) Generate Lifetimes *)
+generateCoinLifeTimes[k_, p_, m_] := Module[
+  {belowP, aboveP, sumBelow, sumAbove, totalSum, lifetimes},
+  
+  (* Generate m lifetimes below p, and k-m lifetimes above p *)
+  belowP = RandomReal[{0, p}, m];
+  aboveP = RandomReal[{p, 2 p}, k - m];
+  
+  sumBelow = Total[belowP];
+  sumAbove = Total[aboveP];
+  totalSum = (k * p) - (sumBelow + sumAbove);
+  
+  (* Adjust the above lifetimes so the total sums to k*p *)
+  aboveP = aboveP + totalSum/(k - m);
+  
+  lifetimes = Join[belowP, aboveP];
+  lifetimes
+];
+(* 2) Simulate Coins with Consecutive Differences using Differences[] *)
+simulateCoinsConsecutive[k_, p_, m_] := Module[
+  {rawLifetimes, scaledLifetimes, sortedCoins, activeCoins, intervals, i},
+  
+  (* 2.1 Generate lifetimes, then scale them to seconds for testing *)
+  rawLifetimes = generateCoinLifeTimes[k, p, m];
+  scaledLifetimes = RandomSample[rawLifetimes]/5000000; 
+    (* Adjust the divisor if you want shorter/longer waits *)
+  
+  (* 2.2 Create {coinNumber, lifetime} pairs and sort by ascending lifetime *)
+  sortedCoins = SortBy[Table[{i, scaledLifetimes[[i]]}, {i, k}], Last];
+  
+  (* 2.3 Make a copy to represent active coins initially *)
+  activeCoins = sortedCoins;
+  
+  Print["Initial coin set:"];
+  Print[
+    Grid[
+      Prepend[activeCoins, {"Coin #", "Lifetime (sec)"}],
+      Frame -> All
+    ]
+  ];
+  
+  (* 2.4 Compute consecutive time intervals using Differences[] *)
+  intervals = Prepend[Differences[sortedCoins[[All, 2]]], sortedCoins[[1, 2]]];
+  
+  (* 2.5 Loop over coins and pause for each interval before removing the coin *)
+  Do[
+    Pause[intervals[[i]]];  (* Wait for the computed interval *)
+    (* Remove the coin with the i-th smallest lifetime *)
+    activeCoins = DeleteCases[activeCoins, sortedCoins[[i]]];
+    
+    If[activeCoins === {},
+      Print["All coins have expired."];
+      Return[],  (* End the simulation if no coins remain *)
+      
+      (* Otherwise, print the updated grid *)
+      Print[
+        Grid[
+          Prepend[activeCoins, {"Coin #", "Lifetime (sec)"}],
+          Frame -> All
+        ]
+      ];
+    ],
+    {i, k}
+  ];
+]
+(* 3) Run the simulation *)
+Rasterize[simulateCoinsConsecutive[6, 31536000, 3]] 
